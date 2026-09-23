@@ -24,6 +24,44 @@ object NotificationHelper {
         else -> type
     }
 
+    fun dowFromDayIdx(dayIdx: Int): Int = when (dayIdx) {
+        0 -> java.util.Calendar.MONDAY
+        1 -> java.util.Calendar.TUESDAY
+        2 -> java.util.Calendar.WEDNESDAY
+        3 -> java.util.Calendar.THURSDAY
+        4 -> java.util.Calendar.FRIDAY
+        5 -> java.util.Calendar.SATURDAY
+        6 -> java.util.Calendar.SUNDAY
+        else -> java.util.Calendar.MONDAY
+    }
+
+    // Resilient trigger parsing: accepts "08:30–09:15", "8.30-9.15", en/em dashes.
+    // Returns the next future trigger millis for the given weekday, or null if
+    // the time string is malformed (caller must skip — never abort the batch).
+    fun nextTriggerMillis(dayIdx: Int, time: String, whenType: String, mins: Int): Long? {
+        val parts = time.split(Regex("[–—\\-]"))
+        val ref = (if (whenType == "end") parts.getOrNull(1) else parts.getOrNull(0)) ?: return null
+        val hm = ref.trim().replace('.', ':').split(":")
+        val h = hm.getOrNull(0)?.trim()?.toIntOrNull() ?: return null
+        val m = hm.getOrNull(1)?.trim()?.toIntOrNull() ?: return null
+        if (h !in 0..23 || m !in 0..59) return null
+        val cal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, h)
+            set(java.util.Calendar.MINUTE, m)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+            val curDow = get(java.util.Calendar.DAY_OF_WEEK)
+            var diff = dowFromDayIdx(dayIdx) - curDow
+            if (diff < 0) diff += 7
+            add(java.util.Calendar.DAY_OF_MONTH, diff)
+            add(java.util.Calendar.MINUTE, -mins)
+        }
+        if (cal.timeInMillis <= System.currentTimeMillis()) {
+            cal.add(java.util.Calendar.WEEK_OF_YEAR, 1)
+        }
+        return cal.timeInMillis
+    }
+
     fun reminderText(type: String, dayIdx: Int, time: String, subj: String, mins: Int, whenType: String): String {
         val action = if (whenType == "end") {
             if (mins == 0) "Заканчивается сейчас"

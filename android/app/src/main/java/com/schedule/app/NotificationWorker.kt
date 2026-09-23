@@ -92,36 +92,14 @@ class NotificationWorker(
         type: String, dayIdx: Int, itemIdx: Int, time: String, subj: String,
         mins: Int, whenType: String, key: String, sound: String, vibro: Boolean
     ) {
-        val parts = time.split(Regex("[–\\-]"))
-        val refParts = if (whenType == "end") parts[1].split(":") else parts[0].split(":")
-        val refHour = refParts[0].toInt()
-        val refMin = refParts[1].toInt()
-
-        val targetDow = when(dayIdx) {
-            0 -> Calendar.MONDAY
-            1 -> Calendar.TUESDAY
-            2 -> Calendar.WEDNESDAY
-            3 -> Calendar.THURSDAY
-            4 -> Calendar.FRIDAY
-            5 -> Calendar.SATURDAY
-            6 -> Calendar.SUNDAY
-            else -> Calendar.MONDAY
+        val triggerAt = try {
+            NotificationHelper.nextTriggerMillis(dayIdx, time, whenType, mins)
+        } catch (e: Exception) {
+            null
         }
-
-        val cal = Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_MONTH, 7)
-            set(Calendar.HOUR_OF_DAY, refHour)
-            set(Calendar.MINUTE, refMin - mins)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-            val curDow = get(Calendar.DAY_OF_WEEK)
-            var diff = targetDow - curDow
-            if (diff < 0) diff += 7
-            add(Calendar.DAY_OF_MONTH, diff)
-        }
-
-        if (cal.timeInMillis <= System.currentTimeMillis()) {
-            cal.add(Calendar.WEEK_OF_YEAR, 1)
+        if (triggerAt == null) {
+            Log.e(TAG, "NotificationWorker: cannot reschedule $key — bad time '$time'")
+            return
         }
 
         val notifId = key.hashCode()
@@ -153,7 +131,7 @@ class NotificationWorker(
             context, notifId, showIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        NotificationHelper.scheduleExact(context, cal.timeInMillis, pending, showPending)
-        Log.d(TAG, "NotificationWorker: weekly rescheduled $key → ${cal.time}")
+        NotificationHelper.scheduleExact(context, triggerAt, pending, showPending)
+        Log.d(TAG, "NotificationWorker: weekly rescheduled $key → ${java.util.Date(triggerAt)}")
     }
 }

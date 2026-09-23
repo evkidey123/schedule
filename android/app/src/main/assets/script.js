@@ -943,6 +943,37 @@ function getReminderKey(type, dayIdx, itemIdx, time, when) {
   return type + "_" + dayIdx + "_" + itemIdx + "_" + time + "_" + (when || "start");
 }
 
+// Drop reminders whose event no longer exists (deleted/retimed) and rebind
+// itemIdx after array re-sorts, so ghost alarms stop firing invisibly.
+function reconcileReminders() {
+  if (!reminders.length) return;
+  let changed = false;
+  const alive = [];
+  for (const r of reminders) {
+    let idx = -1;
+    if (r.type === "school") idx = ((SCHEDULE[r.dayIdx] || {}).lessons || []).findIndex(l => l.time === r.time);
+    else if (r.type === "personal") idx = (PERSONAL[r.dayIdx] || []).findIndex(l => l.time === r.time);
+    else if (r.type === "extended") idx = EXTENDED.findIndex(l => l.time === r.time);
+    else idx = ((((CUSTOM || {})[r.type] || {})[r.dayIdx]) || []).findIndex(l => l.time === r.time);
+    if (idx < 0) { changed = true; console.log("[Reminders] ghost removed: " + r.key); continue; }
+    const key = getReminderKey(r.type, r.dayIdx, idx, r.time, r.when);
+    if (r.itemIdx !== idx || r.key !== key) { r.itemIdx = idx; r.key = key; changed = true; }
+    alive.push(r);
+  }
+  const seen = new Set();
+  const final = [];
+  for (const r of alive) {
+    if (seen.has(r.key)) { changed = true; continue; }
+    seen.add(r.key);
+    final.push(r);
+  }
+  if (changed) {
+    reminders = final;
+    localStorage.setItem("tg_reminders", JSON.stringify(reminders));
+    console.log("[Reminders] reconciled → " + reminders.length + " kept");
+  }
+}
+
 function getReminder(type, dayIdx, itemIdx, time, when) {
   const key = getReminderKey(type, dayIdx, itemIdx, time, when);
   return reminders.find(r => r.key === key);
@@ -1284,7 +1315,7 @@ function saveModal() {
   const type = resolveTypeKey(typeRaw);
   const num = document.getElementById("modalNum").value.trim();
   const subj = document.getElementById("modalSubj").value.trim();
-  const time = document.getElementById("modalTime").value.trim();
+  const time = document.getElementById("modalTime").value.trim().replace(/\./g, ":");
   const room = document.getElementById("modalRoom").value.trim();
   const location = document.getElementById("modalLocation").value.trim();
   const teacher = document.getElementById("modalTeacher").value.trim();
@@ -1723,6 +1754,9 @@ async function init() {
     if (local.custom && Object.keys(local.custom).length) CUSTOM = local.custom;
     if (local.extended && local.extended.length) EXTENDED = local.extended;
   }
+
+  reconcileReminders();
+  if (window.Android) Android.syncReminders(JSON.stringify(reminders));
 
   buildToggles();
 

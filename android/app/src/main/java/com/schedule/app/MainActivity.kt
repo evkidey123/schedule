@@ -967,79 +967,67 @@ class MainActivity : AppCompatActivity() {
     fun scheduleRemindersFromJson(json: String, silent: Boolean = false) {
         Log.d(TAG, "scheduleRemindersFromJson called, json length=${json.length}")
         try {
+            val arr = org.json.JSONArray(json)
+
+            // Parse everything BEFORE touching existing alarms: one malformed
+            // entry must never cancel the rest (parse-then-commit).
+            data class ParsedReminder(
+                val type: String, val dayIdx: Int, val time: String, val subj: String,
+                val mins: Int, val key: String, val whenType: String, val triggerAt: Long,
+                val sound: String, val vibro: Boolean, val repeat: String
+            )
+            val items = mutableListOf<ParsedReminder>()
+            for (i in 0 until arr.length()) {
+                try {
+                    val r = arr.getJSONObject(i)
+                    val type = r.getString("type")
+                    val dayIdx = r.getInt("dayIdx")
+                    val time = r.getString("time")
+                    val subj = r.optString("subj", "")
+                    val mins = r.getInt("mins")
+                    val key = r.getString("key")
+                    val whenType = r.optString("when", "start")
+                    val triggerAt = NotificationHelper.nextTriggerMillis(dayIdx, time, whenType, mins)
+                        ?: throw IllegalArgumentException("bad time '$time'")
+                    items.add(
+                        ParsedReminder(
+                            type, dayIdx, time, subj, mins, key, whenType, triggerAt,
+                            r.optString("sound", ""), r.optBoolean("vibro", true),
+                            r.optString("repeat", "weekly")
+                        )
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "scheduleRemindersFromJson: skipping malformed reminder[$i]: ${e.message}")
+                }
+            }
+
             cancelAllReminders()
 
-            val arr = org.json.JSONArray(json)
-            Log.d(TAG, "Parsed ${arr.length()} reminders from JSON")
-
-            for (i in 0 until arr.length()) {
-                val r = arr.getJSONObject(i)
-                val type = r.getString("type")
-                val dayIdx = r.getInt("dayIdx")
-                val time = r.getString("time")
-                val subj = r.optString("subj", "")
-                val mins = r.getInt("mins")
-                val key = r.getString("key")
-
-                val whenType = r.optString("when", "start")
-
-                val parts = time.split(Regex("[–\\-]"))
-                val refParts = if (whenType == "end") parts[1].split(":") else parts[0].split(":")
-                val refHour = refParts[0].toInt()
-                val refMin = refParts[1].toInt()
-
-                val targetDow = when(dayIdx) {
-                    0 -> java.util.Calendar.MONDAY
-                    1 -> java.util.Calendar.TUESDAY
-                    2 -> java.util.Calendar.WEDNESDAY
-                    3 -> java.util.Calendar.THURSDAY
-                    4 -> java.util.Calendar.FRIDAY
-                    5 -> java.util.Calendar.SATURDAY
-                    6 -> java.util.Calendar.SUNDAY
-                    else -> java.util.Calendar.MONDAY
-                }
-                val cal = java.util.Calendar.getInstance().apply {
-                    set(java.util.Calendar.HOUR_OF_DAY, refHour)
-                    set(java.util.Calendar.MINUTE, refMin - mins)
-                    set(java.util.Calendar.SECOND, 0)
-                    set(java.util.Calendar.MILLISECOND, 0)
-                    val curDow = get(java.util.Calendar.DAY_OF_WEEK)
-                    var diff = targetDow - curDow
-                    if (diff < 0) diff += 7
-                    add(java.util.Calendar.DAY_OF_MONTH, diff)
-                }
-
-                if (cal.timeInMillis <= System.currentTimeMillis()) {
-                    cal.add(java.util.Calendar.WEEK_OF_YEAR, 1)
-                }
-
-                val notifId = key.hashCode()
-                val sound = r.optString("sound", "")
-                val vibro = r.optBoolean("vibro", true)
-                val repeat = r.optString("repeat", "weekly")
+            for ((i, p) in items.withIndex()) {
+                val notifId = p.key.hashCode()
                 val intent = Intent(this, NotificationReceiver::class.java).apply {
-                    putExtra(NotificationReceiver.EXTRA_TITLE, NotificationHelper.reminderTitle(type))
-                    putExtra(NotificationReceiver.EXTRA_TEXT, NotificationHelper.reminderText(type, dayIdx, time, subj, mins, whenType))
+                    putExtra(NotificationReceiver.EXTRA_TITLE, NotificationHelper.reminderTitle(p.type))
+                    putExtra(NotificationReceiver.EXTRA_TEXT, NotificationHelper.reminderText(p.type, p.dayIdx, p.time, p.subj, p.mins, p.whenType))
                     putExtra(NotificationReceiver.EXTRA_NOTIF_ID, notifId)
-                    putExtra(NotificationReceiver.EXTRA_SOUND, sound)
-                    putExtra(NotificationReceiver.EXTRA_VIBRO, vibro)
-                    putExtra(NotificationReceiver.EXTRA_REPEAT, repeat)
-                    putExtra(NotificationReceiver.EXTRA_TYPE, type)
-                    putExtra(NotificationReceiver.EXTRA_DAY_IDX, dayIdx)
+                    putExtra(NotificationReceiver.EXTRA_SOUND, p.sound)
+                    putExtra(NotificationReceiver.EXTRA_VIBRO, p.vibro)
+                    putExtra(NotificationReceiver.EXTRA_REPEAT, p.repeat)
+                    putExtra(NotificationReceiver.EXTRA_TYPE, p.type)
+                    putExtra(NotificationReceiver.EXTRA_DAY_IDX, p.dayIdx)
                     putExtra(NotificationReceiver.EXTRA_ITEM_IDX, i)
-                    putExtra(NotificationReceiver.EXTRA_TIME, time)
-                    putExtra(NotificationReceiver.EXTRA_SUBJ, subj)
-                    putExtra(NotificationReceiver.EXTRA_MINS, mins)
-                    putExtra(NotificationReceiver.EXTRA_WHEN, whenType)
-                    putExtra(NotificationReceiver.EXTRA_KEY, key)
+                    putExtra(NotificationReceiver.EXTRA_TIME, p.time)
+                    putExtra(NotificationReceiver.EXTRA_SUBJ, p.subj)
+                    putExtra(NotificationReceiver.EXTRA_MINS, p.mins)
+                    putExtra(NotificationReceiver.EXTRA_WHEN, p.whenType)
+                    putExtra(NotificationReceiver.EXTRA_KEY, p.key)
                 }
                 val pending = PendingIntent.getBroadcast(
                     this, notifId, intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
 
-                Log.d(TAG, "Reminder[$i]: key=$key type=$type when=$whenType time=$time mins=$mins dayIdx=$dayIdx notifId=$notifId")
-                Log.d(TAG, "  → Alarm time: ${cal.time} (in ${cal.timeInMillis - System.currentTimeMillis()}ms)")
+                Log.d(TAG, "Reminder[$i]: key=${p.key} type=${p.type} when=${p.whenType} time=${p.time} mins=${p.mins} dayIdx=${p.dayIdx} notifId=$notifId")
+                Log.d(TAG, "  → Alarm time: ${java.util.Date(p.triggerAt)} (in ${p.triggerAt - System.currentTimeMillis()}ms)")
 
                 val showIntent = Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -1048,18 +1036,18 @@ class MainActivity : AppCompatActivity() {
                     this, notifId, showIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
-                NotificationHelper.scheduleExact(this, cal.timeInMillis, pending, showPending)
-                Log.d(TAG, "  → Exact alarm SET ($repeat)")
+                NotificationHelper.scheduleExact(this, p.triggerAt, pending, showPending)
+                Log.d(TAG, "  → Exact alarm SET (${p.repeat})")
             }
 
             val editor = getSharedPreferences("schedule_prefs", MODE_PRIVATE).edit()
             editor.putString("reminders_json", json)
             editor.apply()
 
-            Log.d(TAG, "All ${arr.length()} reminders scheduled successfully")
+            Log.d(TAG, "Scheduled ${items.size}/${arr.length()} reminders (malformed skipped: ${arr.length() - items.size})")
             if (!silent) runOnUiThread { Toast.makeText(this, "Напоминания настроены ✓", Toast.LENGTH_SHORT).show() }
         } catch (e: Exception) {
-            Log.e(TAG, "scheduleRemindersFromJson error", e)
+            Log.e(TAG, "scheduleRemindersFromJson error (existing alarms untouched)", e)
         }
     }
 
