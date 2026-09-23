@@ -17,7 +17,7 @@ jobs:
           java-version: '17'
       - name: Build Android debug APK
         working-directory: android
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: bash ./gradlew --no-daemon :app:assembleDebug
       - name: Prepare download
         run: |
           cp android/app/build/outputs/apk/debug/schedule.apk schedule-1.4-design-preview.apk
