@@ -1159,6 +1159,27 @@ function toggleEditMode() {
   renderAll();
 }
 
+function initDayChips() {
+  const box = document.getElementById("modalDayChips");
+  if (!box) return;
+  const names = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  box.innerHTML = names.map((n, i) => `<button type="button" class="day-chip" data-day="${i}">${n}</button>`).join("");
+  box.querySelectorAll(".day-chip").forEach(ch => {
+    ch.onclick = () => ch.classList.toggle("active");
+  });
+  const row = document.getElementById("modalRepeatRow");
+  if (row) row.style.display = "";
+}
+
+function getExtraDays() {
+  const box = document.getElementById("modalDayChips");
+  if (!box) return [];
+  const primary = parseInt(document.getElementById("modalDay").value);
+  return Array.from(box.querySelectorAll(".day-chip.active"))
+    .map(ch => parseInt(ch.dataset.day))
+    .filter(d => d !== primary);
+}
+
 function showAddModal() {
   modalData = { type: "school", dayIdx: currentDayIdx, itemIdx: -1 };
   document.getElementById("modalTitle").textContent = "Добавить урок";
@@ -1175,6 +1196,7 @@ function showAddModal() {
   populateDatalists();
   initColorPicker("");
   initIconPicker("");
+  initDayChips();
   document.getElementById("modalOverlay").style.display = "flex";
 }
 
@@ -1205,6 +1227,11 @@ function showEditModal(type, dayIdx, itemIdx) {
   populateDatalists();
   initColorPicker(item.color || "");
   initIconPicker(item.icon || "");
+  initDayChips();
+  if (type === "extended") {
+    const row = document.getElementById("modalRepeatRow");
+    if (row) row.style.display = "none";
+  }
   document.getElementById("modalOverlay").style.display = "flex";
 }
 
@@ -1274,6 +1301,8 @@ function saveModal() {
   }
   const data = loadLocalData() || { schedule: JSON.parse(JSON.stringify(SCHEDULE)), personal: JSON.parse(JSON.stringify(PERSONAL)), extended: JSON.parse(JSON.stringify(EXTENDED)) };
   const isEdit = modalData.itemIdx >= 0;
+  const extraDays = type === "extended" ? [] : getExtraDays();
+  let savedItem = null;
   if (isEdit && modalData.type !== type) {
     const origDay = modalData.dayIdx;
     if (modalData.type === "school" && data.schedule[origDay]) {
@@ -1305,6 +1334,7 @@ function saveModal() {
       data.schedule[dayIdx].lessons.push(lesson);
       data.schedule[dayIdx].lessons.sort((a, b) => parseTime(a.time) - parseTime(b.time));
     }
+    savedItem = lesson;
   } else if (type === "personal") {
     const item = { subj, time, icon: icon || "🤸" };
     if (room) item.room = room;
@@ -1320,6 +1350,7 @@ function saveModal() {
       data.personal[dayIdx].push(item);
       data.personal[dayIdx].sort((a, b) => parseTime(a.time) - parseTime(b.time));
     }
+    savedItem = item;
   } else if (!isBuiltInType(type)) {
     const item = { subj, time, icon: icon || "⭐" };
     if (room) item.room = room;
@@ -1336,6 +1367,7 @@ function saveModal() {
       data.custom[type][dayIdx].push(item);
       data.custom[type][dayIdx].sort((a, b) => parseTime(a.time) - parseTime(b.time));
     }
+    savedItem = item;
   } else {
     const item = { subj, time, icon: icon || "🎒" };
     if (room) item.room = room;
@@ -1350,6 +1382,7 @@ function saveModal() {
       data.extended.push(item);
       data.extended.sort((a, b) => parseTime(a.time) - parseTime(b.time));
     }
+    savedItem = item;
   }
   if (isEdit && modalData.type === type && modalData.orig) {
     let stored = null;
@@ -1362,11 +1395,43 @@ function saveModal() {
       if (modalData.orig.days) stored.days = modalData.orig.days;
     }
   }
+  if (savedItem && extraDays.length) {
+    for (const d of extraDays) {
+      const clone = JSON.parse(JSON.stringify(savedItem));
+      const exists = (arr) => arr.some(x => x.subj === clone.subj && x.time === clone.time);
+      if (type === "school") {
+        while (data.schedule.length <= d) data.schedule.push({ name: SCHEDULE[data.schedule.length]?.name || "", lessons: [] });
+        if (!exists(data.schedule[d].lessons)) {
+          data.schedule[d].lessons.push(clone);
+          data.schedule[d].lessons.sort((a, b) => parseTime(a.time) - parseTime(b.time));
+        }
+      } else if (type === "personal") {
+        if (!data.personal) data.personal = {};
+        if (!data.personal[d]) data.personal[d] = [];
+        if (!exists(data.personal[d])) {
+          data.personal[d].push(clone);
+          data.personal[d].sort((a, b) => parseTime(a.time) - parseTime(b.time));
+        }
+      } else if (!isBuiltInType(type)) {
+        if (!data.custom[type]) data.custom[type] = {};
+        if (!data.custom[type][d]) data.custom[type][d] = [];
+        if (!exists(data.custom[type][d])) {
+          data.custom[type][d].push(clone);
+          data.custom[type][d].sort((a, b) => parseTime(a.time) - parseTime(b.time));
+        }
+      }
+    }
+  }
   saveLocalData(data);
-  if (type === "school") { while (SCHEDULE.length <= dayIdx) SCHEDULE.push({ name: "", lessons: [] }); SCHEDULE[dayIdx].lessons = data.schedule[dayIdx].lessons; }
-  else if (type === "personal") { PERSONAL[dayIdx] = data.personal[dayIdx] || []; }
-  else if (!isBuiltInType(type)) { if (!CUSTOM[type]) CUSTOM[type] = {}; CUSTOM[type][dayIdx] = data.custom[type][dayIdx] || []; }
-  else { EXTENDED = data.extended; }
+  const syncDays = [dayIdx, ...extraDays];
+  if (type === "school") {
+    for (const d of syncDays) { while (SCHEDULE.length <= d) SCHEDULE.push({ name: "", lessons: [] }); SCHEDULE[d].lessons = data.schedule[d].lessons; }
+  } else if (type === "personal") {
+    for (const d of syncDays) PERSONAL[d] = (data.personal && data.personal[d]) || [];
+  } else if (!isBuiltInType(type)) {
+    if (!CUSTOM[type]) CUSTOM[type] = {};
+    for (const d of syncDays) CUSTOM[type][d] = (data.custom[type] && data.custom[type][d]) || [];
+  } else { EXTENDED = data.extended; }
   closeModal();
   buildToggles();
   renderAll();

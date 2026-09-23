@@ -758,6 +758,28 @@ body.edit-mode .merge-row:hover { opacity: 0.85; }
   transition: background 0.2s, color 0.2s;
 }
 
+.day-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.day-chip {
+  padding: 6px 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.day-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .ac-dropdown {
   position: absolute;
   left: 0;

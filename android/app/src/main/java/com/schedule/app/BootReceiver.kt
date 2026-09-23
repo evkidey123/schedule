@@ -10,8 +10,10 @@ import java.util.Calendar
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != "android.intent.action.LOCKED_BOOT_COMPLETED") return
-        Log.d("ScheduleApp", "Boot completed (${intent.action}) — restoring reminders")
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
+            intent.action != "android.intent.action.LOCKED_BOOT_COMPLETED" &&
+            intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        Log.d("ScheduleApp", "Restore trigger (${intent.action}) — restoring reminders")
 
         try {
             val prefs = context.getSharedPreferences("schedule_prefs", Context.MODE_PRIVATE)
@@ -34,6 +36,7 @@ class BootReceiver : BroadcastReceiver() {
                 val whenType = r.optString("when", "start")
                 val sound = r.optString("sound", "")
                 val vibro = r.optBoolean("vibro", true)
+                val repeat = r.optString("repeat", "weekly")
 
                 val parts = time.split(Regex("[–\\-]"))
                 val refParts = if (whenType == "end") parts[1].split(":") else parts[0].split(":")
@@ -72,7 +75,7 @@ class BootReceiver : BroadcastReceiver() {
                     putExtra(NotificationReceiver.EXTRA_NOTIF_ID, notifId)
                     putExtra(NotificationReceiver.EXTRA_SOUND, sound)
                     putExtra(NotificationReceiver.EXTRA_VIBRO, vibro)
-                    putExtra(NotificationReceiver.EXTRA_REPEAT, "weekly")
+                    putExtra(NotificationReceiver.EXTRA_REPEAT, repeat)
                     putExtra(NotificationReceiver.EXTRA_TYPE, type)
                     putExtra(NotificationReceiver.EXTRA_DAY_IDX, dayIdx)
                     putExtra(NotificationReceiver.EXTRA_ITEM_IDX, i)

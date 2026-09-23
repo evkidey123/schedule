@@ -115,7 +115,18 @@ class MainActivity : AppCompatActivity() {
         createNotificationChannel()
         requestNotificationPermission()
         requestExactAlarmPermission()
+        restoreRemindersFromPrefs()
         if (!batteryPrompted) logPermissionDiagnostics()
+    }
+
+    // Alarms die on force-stop / OEM kill / failed boot restore and are NOT
+    // recreated on app start otherwise — re-arm them from saved prefs every launch.
+    private fun restoreRemindersFromPrefs() {
+        val json = getSharedPreferences("schedule_prefs", MODE_PRIVATE).getString("reminders_json", null)
+        if (!json.isNullOrEmpty()) {
+            Log.d(TAG, "Restoring reminders from prefs (${json.length} chars)")
+            scheduleRemindersFromJson(json, silent = true)
+        }
     }
 
     private fun createNotificationChannel() {
@@ -218,6 +229,15 @@ class MainActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("schedule_prefs", MODE_PRIVATE)
 
+        val configured = try {
+            org.json.JSONArray(prefs.getString("reminders_json", "[]") ?: "[]").length()
+        } catch (e: Exception) { 0 }
+        val nextTxt = am.getNextAlarmClock()?.let {
+            java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.getDefault())
+                .format(java.util.Date(it.triggerTime))
+        } ?: "не назначено"
+        val statusBlock = "\n\nНапоминаний настроено: $configured\nБлижайший сигнал: $nextTxt"
+
         if (issues.isEmpty()) {
             if (!force) return
             val extra = if (OEMHelper.isAggressiveOEM())
@@ -231,7 +251,7 @@ class MainActivity : AppCompatActivity() {
                         "✔ Разрешение на уведомления\n" +
                         "✔ Канал уведомлений\n" +
                         "✔ Точные будильники\n" +
-                        "✔ Оптимизация батареи отключена" + extra
+                        "✔ Оптимизация батареи отключена" + extra + statusBlock
                     )
                     .setPositiveButton("OK", null)
                     .show()
@@ -243,7 +263,7 @@ class MainActivity : AppCompatActivity() {
 
         val stepsText = oemInfo.steps.joinToString("\n")
         val msg = "Проблемы (${issues.size}): ${issues.joinToString(", ")}.\n\n" +
-            "Как исправить:\n$stepsText"
+            "Как исправить:\n$stepsText" + statusBlock
         runOnUiThread {
             AlertDialog.Builder(this, R.style.Theme_Schedule_Dialog)
                 .setTitle("⚠️ ${oemInfo.manufacturer}: уведомления могут не работать")
@@ -929,7 +949,7 @@ class MainActivity : AppCompatActivity() {
 
     // ── Reminders / Notifications ────────────────────────────────────
 
-    fun scheduleRemindersFromJson(json: String) {
+    fun scheduleRemindersFromJson(json: String, silent: Boolean = false) {
         Log.d(TAG, "scheduleRemindersFromJson called, json length=${json.length}")
         try {
             cancelAllReminders()
@@ -1022,7 +1042,7 @@ class MainActivity : AppCompatActivity() {
             editor.apply()
 
             Log.d(TAG, "All ${arr.length()} reminders scheduled successfully")
-            runOnUiThread { Toast.makeText(this, "Напоминания настроены ✓", Toast.LENGTH_SHORT).show() }
+            if (!silent) runOnUiThread { Toast.makeText(this, "Напоминания настроены ✓", Toast.LENGTH_SHORT).show() }
         } catch (e: Exception) {
             Log.e(TAG, "scheduleRemindersFromJson error", e)
         }
