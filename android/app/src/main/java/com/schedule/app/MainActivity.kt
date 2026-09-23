@@ -43,6 +43,7 @@ class MainActivity : AppCompatActivity() {
     private var hasExtended = false
     private var editModeActive = false
     private var updateCheckStarted = false
+    private var pendingInstallPath: String? = null
     private var customKeys: List<String> = emptyList()
     internal var _ringtonePlayer: android.media.Ringtone? = null
     internal var pickerCallback: ((android.net.Uri?) -> Unit)? = null
@@ -138,6 +139,16 @@ class MainActivity : AppCompatActivity() {
         webView.onResume()
         webView.resumeTimers()
         if (this::webView.isInitialized) queryDataState {}
+        pendingInstallPath?.let { path ->
+            if (packageManager.canRequestPackageInstalls()) {
+                pendingInstallPath = null
+                val f = File(path)
+                if (f.exists()) {
+                    Log.d(TAG, "Permission granted — resuming install of $path")
+                    installDownloadedApk(f)
+                }
+            }
+        }
     }
 
     override fun onPause() {
@@ -932,10 +943,14 @@ class MainActivity : AppCompatActivity() {
     private fun installDownloadedApk(file: File) {
         try {
             if (!packageManager.canRequestPackageInstalls()) {
+                // Remember the APK: install resumes automatically in onResume()
+                // once the user grants the permission and comes back.
+                pendingInstallPath = file.absolutePath
                 Toast.makeText(this, "Разрешите установку для «Расписание» в открывшихся настройках", Toast.LENGTH_LONG).show()
                 startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
                 return
             }
+            pendingInstallPath = null
             val uri = FileProvider.getUriForFile(this, "${packageName}.provider", file)
             startActivity(Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
