@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="Расписание 2А · 2026–2027">
 <meta name="twitter:description" content="Расписание уроков 2 «А» класс · ауд. 1-3">
 <meta name="twitter:image" content="https://vividlyvividlife.github.io/schedule/og-image.png">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="app.css?v=10">
 <!-- Yandex.Metrika counter (только веб: в Android-приложении не активируется) -->
 <script type="text/javascript">
     if (!window.Android) {
@@ -34,54 +34,52 @@
 <noscript><div><img src="https://mc.yandex.ru/watch/112500984" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
 <!-- /Yandex.Metrika counter -->
 </head>
-<body>
+<body class="dark">
 
-<section class="day-hero" aria-label="Обзор дня">
-<div class="header">
-  <div>
-    <div class="hero-kicker"><span class="kicker-dot"></span> ТВОЯ НЕДЕЛЯ · 2 «А»</div>
-    <h1 id="headerTitle">Расписание 2026–2027</h1>
-    <div class="sub" id="headerSubtitle">2 «А» · ауд. 1-3</div>
-    <div class="date" id="dateDisplay" data-clock></div>
-    <div class="header-links" style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <a href="https://vividlyvividlife.github.io/schedule/zayavlenie.html" target="_blank" style="font-size:12px;color:var(--accent);text-decoration:none;">Заявление директору →</a>
-      <button onclick="navigator.clipboard.writeText('https://vividlyvividlife.github.io/schedule/zayavlenie.html').then(()=>this.textContent='✓')" style="font-size:11px;background:none;border:1px solid var(--line);color:var(--muted);border-radius:4px;padding:2px 6px;cursor:pointer;">🔗 Копировать</button>
-      <a id="webDocsLink" href="https://github.com/vividlyvividlife/schedule#-как-пользоваться" target="_blank" style="font-size:12px;color:var(--accent);text-decoration:none;">📖 Как пользоваться</a>
-      <a id="webApkLink" href="https://github.com/vividlyvividlife/schedule/releases/latest/download/schedule.apk" style="font-size:12px;color:var(--accent);text-decoration:none;">⬇️ APK</a>
-    </div>
+<div class="app-shell">
+<header class="appbar header">
+  <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><rect x="4" y="4" width="32" height="32" rx="11" stroke="currentColor" stroke-width="2"/><path d="M13 20h14M20 13v14" stroke="currentColor" stroke-width="2"/><circle cx="29" cy="11" r="4" fill="currentColor"/></svg></div>
+  <div class="brand-copy"><h1 id="headerTitle">Расписание</h1><div class="sub" id="headerSubtitle">2 «А» · ауд. 1-3</div><span class="date" id="dateDisplay" data-clock></span></div>
+  <div class="appbar-actions">
+    <button type="button" class="theme-btn icon-button" onclick="toggleTheme()" aria-label="Переключить тему">☀</button>
+    <details class="resource-menu"><summary aria-label="Полезные ссылки">•••</summary><div class="header-links">
+      <a href="https://evkidey123.github.io/schedule/zayavlenie.html" target="_blank" rel="noopener">Заявление директору ↗</a>
+      <a id="webDocsLink" href="https://github.com/evkidey123/schedule#-как-пользоваться" target="_blank" rel="noopener">Как пользоваться ↗</a>
+      <a id="webApkLink" href="https://github.com/vividlyvividlife/schedule/releases/latest/download/schedule.apk">APK — предыдущая версия 1.3</a>
+    </div></details>
   </div>
-  <button class="theme-btn" onclick="toggleTheme()" title="Переключить тему" aria-label="Переключить тему">☀</button>
-</div>
-
-<div class="toggles" id="togglesContainer"></div>
-
-<div class="status" id="status"></div>
-
-<div class="progress-wrap">
-  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-  <div class="progress-label" id="progressLabel"></div>
-</div>
-
-</section>
-
-<div class="countdowns" id="countdowns"></div>
-
-<div class="schedule-heading"><div><div class="section-kicker">ПЛАН НА НЕДЕЛЮ</div><h2 id="selectedDayLabel">Расписание</h2></div><span id="daySummary" class="day-summary"></span></div>
-<nav class="day-tabs" id="dayTabs" aria-label="Дни недели"></nav>
-
-<div class="day-content" id="dayContent"></div>
-
-<div class="edit-bar" id="editBar" style="display:none;">
-  <button class="add-btn" id="addBtn" onclick="showAddModal()" style="display:none;">+ Добавить урок</button>
+</header>
+<main class="workspace">
+  <aside class="overview" aria-label="Обзор сегодняшнего дня">
+    <section class="focus-card" id="focusCard" data-state="free">
+      <div class="focus-topline"><span class="eyebrow"><i class="live-dot"></i> СЕГОДНЯ</span><span class="focus-date">Твой ритм</span></div>
+      <div class="orbit-art" aria-hidden="true"><div class="orbit-ring ring-one"></div><div class="orbit-ring ring-two"></div><div class="orbit-ring ring-three"></div><div class="orbit-core">✦</div><span class="orbit-satellite"></span></div>
+      <div class="focus-copy"><span class="eyebrow" id="focusEyebrow">ВСЁ ПОД КОНТРОЛЕМ</span><h2 id="focusTitle">Собираем твой день…</h2><div class="status" id="status"></div></div>
+      <div class="progress-wrap"><div class="progress-caption"><span>Ритм дня</span><span id="progressLabel">Без спешки</span></div><div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div></div>
+    </section>
+    <section class="milestones" aria-label="До каникул и праздников"><div class="aside-heading"><span>На горизонте</span><span aria-hidden="true">↗</span></div><div class="countdowns" id="countdowns"></div></section>
+    <div class="aside-note"><span aria-hidden="true">✳</span><p>Один день.<br>Много возможностей.</p></div>
+  </aside>
+  <section class="planner" aria-label="План занятий">
+    <div class="planner-heading"><div><span class="eyebrow section-kicker">ТВОИ ПЛАНЫ</span><h2 id="selectedDayLabel">Расписание</h2><span id="daySummary" class="day-summary"></span></div><button type="button" class="text-button today-button" id="todayBtn" onclick="switchDay(getTodayIndex())">Сегодня <span aria-hidden="true">↗</span></button></div>
+    <div class="planner-navigation"><nav class="day-tabs" id="dayTabs" aria-label="Дни недели"></nav></div>
+    <div class="planner-toolbar"><div class="view-switch" aria-label="Вид расписания"><button type="button" data-view-button="day" onclick="setScheduleView('day')" class="active" aria-pressed="true">День</button><button type="button" data-view-button="week" onclick="setScheduleView('week')" aria-pressed="false">Неделя</button></div><button type="button" id="editModeBtn" class="text-button edit-mode-button" onclick="toggleEditMode()" aria-pressed="false">Редактировать <span aria-hidden="true">↗</span></button></div>
+    <div class="toggles" id="togglesContainer" aria-label="Фильтры занятий"></div>
+    <div class="day-content" id="dayContent" aria-label="Занятия выбранного дня"></div>
+    <div class="edit-bar" id="editBar" style="display:none"><button type="button" class="add-btn" id="addBtn" onclick="showAddModal()" style="display:none">＋ Добавить занятие</button></div>
+    <div class="planner-footer"><span class="footer-dot"></span> Всё важное — в одном дне</div>
+  </section>
+</main>
 </div>
 
 <div class="modal-overlay" id="modalOverlay" style="display:none;" onclick="closeModal()">
-  <div class="modal" onclick="event.stopPropagation()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" onclick="event.stopPropagation()">
     <div class="modal-header">
       <div class="modal-title" id="modalTitle">Редактировать</div>
-      <button class="modal-close" onclick="closeModal()">✕</button>
+      <button aria-label="Закрыть редактор" class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
+      <p id="modalError" class="form-error" role="alert" hidden></p>
       <label class="modal-label">День
         <select class="modal-input" id="modalDay"></select>
       </label>
@@ -124,32 +122,16 @@
   </div>
 </div>
 
-<script src="engines.js?v=6"></script>
-<script src="script.js?v=8"></script>
+<script src="engines.js?v=10"></script>
+<script src="schedule-core.js?v=10"></script>
+<script src="schedule-ui.js?v=10"></script>
+<script src="script.js?v=10"></script>
 <script>
 // GitHub links are web-only: hide them inside the Android WebView.
 if (window.Android) ["webDocsLink", "webApkLink"].forEach(function(id) {
   var el = document.getElementById(id);
   if (el) el.style.display = "none";
 });
-// Web: show the latest release tag next to the APK link, and call out
-// an update if the visitor last downloaded an older one (branch never runs in Android).
-else fetch("https://api.github.com/repos/vividlyvividlife/schedule/releases/latest")
-  .then(function(r) { return r.json(); })
-  .then(function(d) {
-    var el = document.getElementById("webApkLink");
-    if (!el || !d || !d.tag_name) return;
-    var tag = d.tag_name;
-    el.textContent = "⬇️ APK " + tag;
-    var seen = null;
-    try { seen = localStorage.getItem("apk_version"); } catch (e) {}
-    if (seen && seen !== tag) {
-      el.textContent = "⬆️ Обновите приложение — вышла версия " + tag;
-      el.style.fontWeight = "bold";
-    }
-    el.addEventListener("click", function() { try { localStorage.setItem("apk_version", tag); } catch (e) {} });
-  })
-  .catch(function() {});
 </script>
 </body>
 </html>

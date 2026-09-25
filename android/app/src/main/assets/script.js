@@ -285,7 +285,7 @@ function setupAutocomplete(inputId, getOptions) {
     }
     if (!opts.length) { dropdown.style.display = "none"; activeIdx = -1; return; }
     activeIdx = -1;
-    dropdown.innerHTML = opts.map((o, i) => `<div class="ac-item" data-val="${o.replace(/"/g, '&quot;')}" data-idx="${i}">${o}</div>`).join("");
+    dropdown.innerHTML = opts.map((o, i) => `<div class="ac-item" data-val="${uiEscape(o)}" data-idx="${i}">${uiEscape(o)}</div>`).join("");
     dropdown.style.display = "block";
     dropdown.querySelectorAll(".ac-item").forEach(item => {
       item.onmousedown = (e) => {
@@ -476,7 +476,7 @@ function renderCountdowns() {
   const pct = Math.min(100, Math.round(pctRaw * 10) / 10);
   const pctDisplay = pct % 1 === 0 ? pct : pct.toFixed(1);
 
-  const dayWord = daysPassed === 1 ? "день" : (daysPassed >= 2 && daysPassed <= 4 ? "дня" : "дней");
+  const dayWord = ScheduleCore.plural(daysPassed, ["день", "дня", "дней"]);
   const phrases = [
     `📚 ${daysPassed} ${dayWord} учебы — ${pctDisplay}% пути`,
     `📚 ${daysPassed} ${dayWord} за партами — ${pctDisplay}% пути`,
@@ -493,178 +493,7 @@ function renderCountdowns() {
       </div>
     </div>`;
 
-  el.innerHTML = html;
-}
-
-function renderLesson(l, state, dayIdx, itemIdx) {
-  const cls = state === "current" ? " current" : state === "past" ? " past" : state === "next" ? " next" : " future";
-  const startTime = parseTime(l.time);
-  const endTime = parseTime(l.time.split(/[–\-]/)[1]);
-  const rawIcon = l.icon || ICONS[l.subj] || "📋";
-  const iconHtml = Array.isArray(rawIcon)
-    ? `<div class="lesson-icon grid">${rawIcon.map(c => `<span>${c}</span>`).join("")}</div>`
-    : `<div class="lesson-icon">${rawIcon}</div>`;
-  const paidBadge = l.paid ? ' <span style="font-size:11px;color:#e8a84c;" title="Платный">💰</span>' : "";
-  const num = (l.subj && (l.subj.startsWith("Факультатив") || l.subj.startsWith("Кружок"))) ? "⭐" : (l.n != null ? l.n : "");
-  const progressAttr = state === "current" ? `data-progress="${startTime}" data-end="${endTime}"` : "";
-  const progressDiv = state === "current" ? (() => {
-    const now = new Date();
-    const cur = now.getHours() * 60 + now.getMinutes();
-    const pct = Math.max(0, Math.min(100, ((cur - startTime) / (endTime - startTime)) * 100));
-    return `<div class="row-progress" style="width:${100 - pct}%"></div>`;
-  })() : "";
-  const cdAttr = state === "next" ? `data-cd="${startTime}"` : state === "current" ? `data-cd-end="${endTime}"` : "";
-  const cdText = state === "next" ? countdownSec(startTime) : state === "current" ? remainingSec(endTime) : "";
-  const roomText = l.room ? `<div class="lesson-room">${l.room}</div>` : "";
-  const typeLabel = l.typeLabel || (l.subj && l.subj.startsWith("Кружок") ? "Кружок" : l.subj && l.subj.startsWith("Факультатив") ? "Факультатив" : "Урок");
-  const bellHtml = window.Android ? (() => {
-    const startRem = getReminder("school", dayIdx, itemIdx, l.time, "start");
-    const endRem = getReminder("school", dayIdx, itemIdx, l.time, "end");
-    const startCls = startRem ? " bell-active" : "";
-    const endCls = endRem ? " bell-active" : "";
-    const subjEsc = (l.subj||'').replace(/'/g,"\\'");
-    return `<button class="bell-btn${startCls}" onclick="event.stopPropagation();toggleReminder('school',${dayIdx},${itemIdx},'${l.time}','${subjEsc}','start')" title="До начала">🔔${bellMinsHtml(startRem)}</button>` +
-           `<button class="bell-btn${endCls}" onclick="event.stopPropagation();toggleReminder('school',${dayIdx},${itemIdx},'${l.time}','${subjEsc}','end')" title="До конца">⏰${bellMinsHtml(endRem)}</button>`;
-  })() : "";
-  const editBtn = editMode ? `<div class="edit-actions"><button class="edit-btn-sm" onclick="event.stopPropagation();showEditModal('school',${dayIdx},${itemIdx})">✏️</button></div>` : "";
-  const colorStyle = l.color ? `border-left:4px solid ${l.color};` : "";
-  const teacherText = l.teacher ? `<div class="lesson-teacher">${l.teacher}</div>` : "";
-  const locationText = l.location ? `<div class="lesson-location">${l.location}</div>` : "";
-  return `
-    <div class="lesson${cls}" ${colorStyle ? `style="${colorStyle}"` : ""} data-start="${startTime}" data-end="${endTime}" data-day="${dayIdx}" data-state="${state}" ${progressAttr} ${editMode ? 'onclick="showEditModal(\'school\',' + dayIdx + ',' + itemIdx + ')"' : ''}>
-      ${progressDiv}
-      <div class="lesson-body" style="position:relative;z-index:1;">
-        ${iconHtml}
-        <div class="lesson-num">${num}</div>
-        <div class="lesson-info">
-          <div class="merge-label school">${typeLabel}</div>
-          <div class="lesson-time">${l.time}</div>
-          <div class="lesson-subject">${l.subj}${paidBadge}</div>
-          ${roomText}
-          ${teacherText}
-          ${locationText}
-          ${cdAttr ? `<div class="lesson-countdown" ${cdAttr}>${cdText}</div>` : ""}
-        </div>
-        ${bellHtml}
-        ${editBtn}
-      </div>
-    </div>`;
-}
-
-function renderExtendedItem(item, state, dayIdx, itemIdx) {
-  const cls = state === "current" ? " current" : state === "past" ? " past" : state === "next" ? " next" : " future";
-  const startTime = parseTime(item.time);
-  const endTime = parseTime(item.time.split(/[–\-]/)[1]);
-  const cdAttr = state === "next" ? `data-cd="${startTime}"` : state === "current" ? `data-cd-end="${endTime}"` : "";
-  const cdText = state === "next" ? countdownSec(startTime) : state === "current" ? remainingSec(endTime) : "";
-  const progressAttr = state === "current" ? `data-progress="${startTime}" data-end="${endTime}"` : "";
-  const progressDiv = state === "current" ? (() => {
-    const now = new Date();
-    const cur = now.getHours() * 60 + now.getMinutes();
-    const pct = Math.max(0, Math.min(100, ((cur - startTime) / (endTime - startTime)) * 100));
-    return `<div class="row-progress" style="width:${100 - pct}%"></div>`;
-  })() : "";
-  const type = item._type || "extended";
-  const typeLabel = item.typeLabel || typeName(type);
-  const typeCls = typeClsOf(type);
-  const paidBadge = item.paid ? ' <span style="font-size:11px;color:#e8a84c;" title="Платный">💰</span>' : "";
-  const bellHtml = window.Android ? (() => {
-    const startRem = getReminder(type, dayIdx, itemIdx, item.time, "start");
-    const endRem = getReminder(type, dayIdx, itemIdx, item.time, "end");
-    const startCls = startRem ? " bell-active" : "";
-    const endCls = endRem ? " bell-active" : "";
-    const subjEsc = (item.subj||'').replace(/'/g,"\\'");
-    return `<button class="bell-btn${startCls}" onclick="event.stopPropagation();toggleReminder('${type}',${dayIdx},${itemIdx},'${item.time}','${subjEsc}','start')" title="До начала">🔔${bellMinsHtml(startRem)}</button>` +
-           `<button class="bell-btn${endCls}" onclick="event.stopPropagation();toggleReminder('${type}',${dayIdx},${itemIdx},'${item.time}','${subjEsc}','end')" title="До конца">⏰${bellMinsHtml(endRem)}</button>`;
-  })() : "";
-  const editBtn = editMode ? `<div class="edit-actions"><button class="edit-btn-sm" onclick="event.stopPropagation();showEditModal('${type}',${dayIdx},${itemIdx})">✏️</button></div>` : "";
-  const colorStyle = item.color ? `border-left:4px solid ${item.color};` : "";
-  return `
-    <div class="lesson${cls}" ${colorStyle ? `style="${colorStyle}"` : ""} data-start="${startTime}" data-end="${endTime}" data-day="${dayIdx}" data-state="${state}" ${progressAttr} ${editMode ? `onclick="showEditModal('${type}',${dayIdx},${itemIdx})"` : ''}>
-      ${progressDiv}
-      <div class="lesson-body" style="position:relative;z-index:1;">
-        <div class="lesson-icon">${item.icon}</div>
-        <div class="lesson-num" style="color:var(--accent);font-size:11px;">⏰</div>
-        <div class="lesson-info">
-          <div class="merge-label ${typeCls}">${typeLabel}</div>
-          <div class="lesson-time">${item.time}</div>
-          <div class="lesson-subject">${item.subj}${paidBadge}</div>
-          ${item.room ? `<div class="lesson-room">${item.room}</div>` : ""}
-          ${item.teacher ? `<div class="lesson-teacher">${item.teacher}</div>` : ""}
-          ${item.location ? `<div class="lesson-location">${item.location}</div>` : ""}
-          ${cdAttr ? `<div class="lesson-countdown" ${cdAttr}>${cdText}</div>` : ""}
-        </div>
-        ${bellHtml}
-        ${editBtn}
-      </div>
-    </div>`;
-}
-
-function timeRangeOverlap(a, b) {
-  const aS = parseTime(a.time);
-  const aE = parseTime(a.time.split(/[–\-]/)[1]);
-  const bS = parseTime(b.time);
-  const bE = parseTime(b.time.split(/[–\-]/)[1]);
-  return aS < bE && bS < aE;
-}
-
-function renderMergeCard(group, dayIdx) {
-  const times = group.map(i => i.time.split(/[–\-]/).map(parseTime));
-  const earliestS = Math.min(...times.map(t => t[0]));
-  const earliestE = Math.max(...times.map(t => t[1]));
-  const timeStr = `${Math.floor(earliestS/60)}:${String(earliestS%60).padStart(2,"0")}–${Math.floor(earliestE/60)}:${String(earliestE%60).padStart(2,"0")}`;
-  const state = getCardState(dayIdx, timeStr);
-  const cls = `merge-card ${state}`;
-
-  const rows = group.map(item => {
-    const labelCls = typeClsOf(item._type);
-    const labelText = item._type === "school" ? (item.subj && item.subj.startsWith("Кружок") ? "Кружок" : "Урок") : item._type === "personal" ? "Занятие" : item._type === "extended" ? "Продлёнка" : item._type;
-    const itemStart = parseTime(item.time);
-    const itemEnd = parseTime(item.time.split(/[–\-]/)[1]);
-    const rowState = getCardState(dayIdx, item.time);
-    const rowProgressAttr = rowState === "current" ? `data-progress="${itemStart}" data-end="${itemEnd}"` : "";
-    const cdAttr = rowState === "next" ? `data-cd="${itemStart}"` : rowState === "current" ? `data-cd-end="${itemEnd}"` : "";
-    const cdText = rowState === "next" ? countdownSec(itemStart) : rowState === "current" ? remainingSec(itemEnd) : "";
-    const num = item._type === "school" ? (item.subj && (item.subj.startsWith("Факультатив") || item.subj.startsWith("Кружок")) ? "⭐" : (item.n != null ? item.n : "")) : "⏰";
-    const paidBadge = item.paid ? ' <span style="font-size:11px;color:#e8a84c;" title="Платный">💰</span>' : "";
-    const bellHtml = window.Android ? (() => {
-      const subjEsc = (item.subj||'').replace(/'/g,"\\'");
-      const startRem = getReminder(item._type, dayIdx, item._itemIdx, item.time, "start");
-      const endRem = getReminder(item._type, dayIdx, item._itemIdx, item.time, "end");
-      const startCls = startRem ? " bell-active" : "";
-      const endCls = endRem ? " bell-active" : "";
-      return `<button class="bell-btn${startCls}" onclick="event.stopPropagation();toggleReminder('${item._type}',${dayIdx},${item._itemIdx},'${item.time}','${subjEsc}','start')" title="До начала">🔔${bellMinsHtml(startRem)}</button>` +
-             `<button class="bell-btn${endCls}" onclick="event.stopPropagation();toggleReminder('${item._type}',${dayIdx},${item._itemIdx},'${item.time}','${subjEsc}','end')" title="До конца">⏰${bellMinsHtml(endRem)}</button>`;
-    })() : "";
-    const editBtn = editMode ? `<div class="edit-actions"><button class="edit-btn-sm" onclick="event.stopPropagation();showEditModal('${item._type}',${dayIdx},${item._itemIdx})">✏️</button></div>` : "";
-    const colorStyle = item.color ? `border-left:3px solid ${item.color};` : "";
-    const progressDiv = rowState === "current" ? (() => {
-      const now = new Date();
-      const cur = now.getHours() * 60 + now.getMinutes();
-      const pct = Math.max(0, Math.min(100, ((cur - itemStart) / (itemEnd - itemStart)) * 100));
-      return `<div class="row-progress" style="width:${100 - pct}%"></div>`;
-    })() : "";
-    return `
-      <div class="merge-row" ${colorStyle ? `style="${colorStyle}"` : ""} data-start="${itemStart}" data-end="${itemEnd}" data-day="${dayIdx}" data-state="${rowState}" ${rowProgressAttr} ${editMode ? `onclick="showEditModal('${item._type}',${dayIdx},${item._itemIdx})"` : ''}>
-        ${progressDiv}
-        <div class="merge-icon ${labelCls}">${item._icon || "📋"}</div>
-        <div class="merge-info">
-          <div class="merge-label ${labelCls}">${labelText}</div>
-          <div class="merge-time">${item.time}</div>
-          <div class="merge-subj">${item.subj}${paidBadge}</div>
-          ${item.room ? `<div class="merge-room">${item.room}</div>` : ""}
-          ${item.teacher ? `<div class="lesson-teacher">${item.teacher}</div>` : ""}
-          ${item.location ? `<div class="lesson-location">${item.location}</div>` : ""}
-          ${cdAttr ? `<div class="merge-countdown" ${cdAttr}>${cdText}</div>` : ""}
-        </div>
-        <div class="merge-actions">
-          ${bellHtml}
-          ${editBtn}
-        </div>
-      </div>`;
-  }).join("");
-
-  return `<div class="${cls}" data-start="${earliestS}" data-end="${earliestE}" data-day="${dayIdx}" data-state="${state}">${rows}</div>`;
+  if (el.innerHTML !== html) el.innerHTML = html;
 }
 
 function renderWeekendMsg(dayIdx) {
@@ -744,7 +573,7 @@ function editHeaderText() {
 }
 
 function addHeaderEditBtn() {
-  const header = document.querySelector(".header > div");
+  const header = document.querySelector(".brand-copy");
   if (!header || document.getElementById("editHeaderBtn")) return;
   const btn = document.createElement("button");
   btn.id = "editHeaderBtn";
@@ -755,196 +584,9 @@ function addHeaderEditBtn() {
   header.insertBefore(btn, header.querySelector(".date"));
 }
 
-function renderStatus() {
-  const el = document.getElementById("status");
-  const today = getTodayIndex();
-  const day = SCHEDULE[today];
-  const items = getTodayItems(today);
-  const info = items.length ? getCurrentLesson({ lessons: items }) : null;
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-
-  if (!items.length) {
-    const msg = getWeekendMessage(today);
-    const tip = today === 5
-      ? "Отдыхай — ты заслужил!"
-      : today === 6
-        ? "Завтра школа — подготовь рюкзак!"
-        : "Включи нужные расписания тоглами ↑";
-    el.innerHTML = `${msg.emoji} ${msg.text}<br><span style="font-size:12px;color:var(--muted)">${tip}</span>`;
-    return;
-  }
-  if (!info) {
-    el.innerHTML = `${day.name} · ${timeStr} · Уроков на сегодня нет`;
-    return;
-  }
-  const l = items[info.idx];
-  if (info.type === "current") {
-    const endTime = parseTime(l.time.split(/[–\-]/)[1]);
-    el.innerHTML = `Сейчас: <span class="highlight">${l.subj}</span> · ${l.time} · <span data-cd-end="${endTime}">${remainingSec(endTime)}</span>`;
-  } else if (info.type === "next") {
-    el.innerHTML = `Следующий: <span class="highlight">${l.subj}</span> · ${l.time} · <span data-cd="${parseTime(l.time)}">${countdownSec(parseTime(l.time))}</span>`;
-  } else {
-    el.innerHTML = `${day.name} · ${timeStr} · Уроков на сегодня нет`;
-  }
-}
-
-// All visible schedules for a day: school + personal + custom + extended.
-// Shared by the top progress bar and the status line so they always agree.
-function getTodayItems(today) {
-  const day = SCHEDULE[today] || { lessons: [] };
-  const allItems = schoolOn ? [...(day.lessons || [])] : [];
-  if (personalOn) allItems.push(...(PERSONAL[today] || []));
-  for (const k of Object.keys(CUSTOM)) {
-    if (!customOn(k)) continue;
-    allItems.push(...(((CUSTOM[k] || {})[today]) || []));
-  }
-  if (extendedOn && today <= 4) { // extended care is Mon-Fri only, Sat/Sun off
-    for (const e of EXTENDED) {
-      if (e.days && !e.days.includes(today)) continue;
-      const eS = parseTime(e.time) * 60;
-      let overlaps = false;
-      for (const l of (day.lessons || [])) {
-        if (l.subj && (l.subj.startsWith("Факультатив") || l.subj.startsWith("Кружок"))) continue;
-        const lS = parseTime(l.time) * 60;
-        const lE = parseTime(l.time.split(/[–\-]/)[1] || "") * 60;
-        const eE = parseTime(e.time.split(/[–\-]/)[1] || "") * 60;
-        if (eS < lE && eE > lS) { overlaps = true; break; }
-      }
-      if (!overlaps) allItems.push(e);
-    }
-  }
-  return allItems;
-}
-
-function renderProgress() {
-  try {
-  const today = getTodayIndex();
-  const fill = document.getElementById("progressFill");
-  const lbl = document.getElementById("progressLabel");
-  if (!fill) return;
-  const now = new Date();
-  const cur = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-
-  const allItems = getTodayItems(today);
-
-  if (!allItems.length) { fill.style.width = "0%"; if (lbl) lbl.textContent = ""; return; }
-  let first = Infinity, last = 0;
-  for (const item of allItems) {
-    const s = parseTime(item.time) * 60;
-    const endStr = (item.time.split(/[–\-]/)[1] || "").trim();
-    const e = endStr ? parseTime(endStr) * 60 : s + 2700;
-    if (s < first) first = s;
-    if (e > last) last = e;
-  }
-  if (first === Infinity || last <= first) { fill.style.width = "0%"; if (lbl) lbl.textContent = ""; return; }
-  const pct = Math.max(0, Math.min(100, ((cur - first) / (last - first)) * 100));
-  fill.style.width = pct + "%";
-  if (lbl) lbl.textContent = Math.round(pct) + "%";
-  } catch(err) {}
-}
-
-function updateDayHeading() {
-  const day = SCHEDULE[currentDayIdx];
-  if (!day) return;
-  const title = document.getElementById("selectedDayLabel");
-  const summary = document.getElementById("daySummary");
-  if (title) title.textContent = day.name;
-  if (summary) {
-    const scope = window.innerWidth < 768 ? document.querySelector(".day-panel.active") : document.querySelector(`.diary-day[data-day="${currentDayIdx}"]`);
-    const count = scope ? scope.querySelectorAll(".lesson, .merge-row").length : 0;
-    summary.textContent = count ? `${count} занятий` : "Свободный день";
-  }
-}
-
-function renderTabs() {
-  const wrap = document.getElementById("dayTabs");
-  const today = getTodayIndex();
-  wrap.innerHTML = SCHEDULE.map((d, i) => {
-    const cls = `${i === currentDayIdx ? " active" : ""}${i === today ? " today" : ""}`;
-    return `<button type="button" class="day-tab${cls}" data-day="${i}" aria-label="${d.name}${i === today ? ", сегодня" : ""}" aria-current="${i === currentDayIdx ? "date" : "false"}" onclick="switchDay(${i})"><span>${d.short}</span></button>`;
-  }).join("");
-}
-
-function switchDay(idx) {
-  if (idx < 0 || idx >= SCHEDULE.length) return;
-  currentDayIdx = idx;
-  document.querySelectorAll(".day-tab").forEach((t, i) => {
-    t.classList.toggle("active", i === idx);
-    t.setAttribute("aria-current", i === idx ? "date" : "false");
-  });
-  document.querySelectorAll(".day-panel").forEach((p, i) => {
-    p.classList.toggle("active", i === idx);
-  });
-  updateDayHeading();
-  if (window.innerWidth >= 768) {
-    const section = document.querySelector(`.diary-day[data-day="${idx}"]`);
-    if (section) section.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "center" });
-  }
-}
-
-function buildToggles() {
-  const c = document.getElementById("togglesContainer");
-  if (!c) return;
-  let html = "";
-  const hasExtended = EXTENDED.length > 0;
-  const hasSchool = SCHEDULE.some(d => d.lessons.length > 0);
-  const hasPersonal = typeof Android !== "undefined" && Object.keys(PERSONAL).some(k => Array.isArray(PERSONAL[k]) && PERSONAL[k].length > 0);
-  if (typeof Android === "undefined") personalOn = false;
-  if (hasExtended && localStorage.getItem("extended") === null) { extendedOn = true; localStorage.setItem("extended", true); }
-  if (hasSchool) {
-    html += `<div class="toggle-item"><label class="toggle"><input type="checkbox" id="schoolToggle" onchange="onToggle()"><span class="toggle-slider"></span></label><label for="schoolToggle">Уроки</label></div>`;
-  }
-  if (hasExtended) {
-    html += `<div class="toggle-item"><label class="toggle"><input type="checkbox" id="extendedToggle" onchange="onToggle()"><span class="toggle-slider"></span></label><label for="extendedToggle">Продлёнка</label></div>`;
-  }
-  if (hasPersonal) {
-    html += `<div class="toggle-item"><label class="toggle"><input type="checkbox" id="personalToggle" onchange="onToggle()"><span class="toggle-slider"></span></label><label for="personalToggle">Занятия</label></div>`;
-  }
-  const customKeys = Object.keys(CUSTOM).filter(k => Object.values(CUSTOM[k] || {}).some(arr => Array.isArray(arr) && arr.length > 0));
-  for (const k of customKeys) {
-    html += `<div class="toggle-item"><label class="toggle"><input type="checkbox" data-custom-key="${k}" onchange="onToggle()"><span class="toggle-slider"></span></label><label>${k}</label></div>`;
-  }
-  c.innerHTML = html;
-  if (schoolOn && hasSchool) document.getElementById("schoolToggle").checked = true;
-  if (extendedOn && hasExtended) document.getElementById("extendedToggle").checked = true;
-  if (hasPersonal) {
-    if (localStorage.getItem("personal") === null) { personalOn = true; localStorage.setItem("personal", true); }
-    if (personalOn) document.getElementById("personalToggle").checked = true;
-  }
-  customKeys.forEach(k => {
-    if (localStorage.getItem("custom_" + k) === null) localStorage.setItem("custom_" + k, "true");
-    const t = document.querySelector('input[data-custom-key="' + k + '"]');
-    if (t && customOn(k)) t.checked = true;
-  });
-}
-
-function onToggle() {
-  const sch = document.getElementById("schoolToggle");
-  const ext = document.getElementById("extendedToggle");
-  const pers = document.getElementById("personalToggle");
-  if (sch) { schoolOn = sch.checked; localStorage.setItem("school", schoolOn); }
-  if (ext) { extendedOn = ext.checked; localStorage.setItem("extended", extendedOn); }
-  if (pers) { personalOn = pers.checked; localStorage.setItem("personal", personalOn); }
-  document.querySelectorAll("#togglesContainer input[data-custom-key]").forEach(t => {
-    localStorage.setItem("custom_" + t.dataset.customKey, t.checked);
-  });
-  console.log("[Toggles] school=" + schoolOn + " extended=" + extendedOn + " personal=" + personalOn + " custom=" +
-    JSON.stringify(Array.from(document.querySelectorAll("#togglesContainer input[data-custom-key]")).map(t => ({ k: t.dataset.customKey, on: t.checked }))));
-  renderAll();
-  renderProgress();
-}
-
-function toggleTheme() {
-  document.body.classList.toggle("dark");
-  const btn = document.querySelector(".theme-btn");
-  btn.textContent = document.body.classList.contains("dark") ? "☾" : "☀";
-  localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
-}
-
 let editMode = isEditMode();
 let modalData = { type: null, dayIdx: -1, itemIdx: -1 };
-let reminders = JSON.parse(localStorage.getItem("tg_reminders") || "[]");
+let reminders = readReminders();
 
 function saveReminders() {
   localStorage.setItem("tg_reminders", JSON.stringify(reminders));
@@ -970,10 +612,10 @@ function reconcileReminders() {
   const alive = [];
   for (const r of reminders) {
     let idx = -1;
-    if (r.type === "school") idx = ((SCHEDULE[r.dayIdx] || {}).lessons || []).findIndex(l => l.time === r.time);
-    else if (r.type === "personal") idx = (PERSONAL[r.dayIdx] || []).findIndex(l => l.time === r.time);
-    else if (r.type === "extended") idx = EXTENDED.findIndex(l => l.time === r.time);
-    else idx = ((((CUSTOM || {})[r.type] || {})[r.dayIdx]) || []).findIndex(l => l.time === r.time);
+    if (r.type === "school") idx = ((SCHEDULE[r.dayIdx] || {}).lessons || []).findIndex(l => l.time === r.time && (!r.subj || l.subj === r.subj));
+    else if (r.type === "personal") idx = (PERSONAL[r.dayIdx] || []).findIndex(l => l.time === r.time && (!r.subj || l.subj === r.subj));
+    else if (r.type === "extended") idx = EXTENDED.findIndex(l => l.time === r.time && (!r.subj || l.subj === r.subj));
+    else idx = ((((CUSTOM || {})[r.type] || {})[r.dayIdx]) || []).findIndex(l => l.time === r.time && (!r.subj || l.subj === r.subj));
     if (idx < 0) { changed = true; console.log("[Reminders] ghost removed: " + r.key); continue; }
     const key = getReminderKey(r.type, r.dayIdx, idx, r.time, r.when);
     if (r.itemIdx !== idx || r.key !== key) { r.itemIdx = idx; r.key = key; changed = true; }
@@ -1248,6 +890,7 @@ function showAddModal() {
   initIconPicker("");
   initDayChips();
   document.getElementById("modalOverlay").style.display = "flex";
+  openEditorFocus();
 }
 
 function showEditModal(type, dayIdx, itemIdx) {
@@ -1283,10 +926,7 @@ function showEditModal(type, dayIdx, itemIdx) {
     if (row) row.style.display = "none";
   }
   document.getElementById("modalOverlay").style.display = "flex";
-}
-
-function closeModal() {
-  document.getElementById("modalOverlay").style.display = "none";
+  openEditorFocus();
 }
 
 let _selectedColor = "";
@@ -1328,367 +968,6 @@ function initIconPicker(icon) {
   });
 }
 
-function saveModal() {
-  const dayIdx = parseInt(document.getElementById("modalDay").value);
-  const typeRaw = document.getElementById("modalType").value.trim();
-  const type = resolveTypeKey(typeRaw);
-  const num = document.getElementById("modalNum").value.trim();
-  const subj = document.getElementById("modalSubj").value.trim();
-  const time = document.getElementById("modalTime").value.trim().replace(/\./g, ":");
-  const room = document.getElementById("modalRoom").value.trim();
-  const location = document.getElementById("modalLocation").value.trim();
-  const teacher = document.getElementById("modalTeacher").value.trim();
-  const color = _selectedColor;
-  const icon = _selectedIcon;
-  const errors = [];
-  if (!subj) errors.push("предмет");
-  if (!time) errors.push("время");
-  if (errors.length) {
-    const msg = "Заполните: " + errors.join(", ");
-    if (window.Android) Android.showToast(msg);
-    else alert(msg);
-    return;
-  }
-  const data = loadLocalData() || { schedule: JSON.parse(JSON.stringify(SCHEDULE)), personal: JSON.parse(JSON.stringify(PERSONAL)), extended: JSON.parse(JSON.stringify(EXTENDED)) };
-  const isEdit = modalData.itemIdx >= 0;
-  const extraDays = type === "extended" ? [] : getExtraDays();
-  let savedItem = null;
-  if (isEdit && modalData.type !== type) {
-    const origDay = modalData.dayIdx;
-    if (modalData.type === "school" && data.schedule[origDay]) {
-      data.schedule[origDay].lessons.splice(modalData.itemIdx, 1);
-      if (SCHEDULE[origDay]) SCHEDULE[origDay].lessons.splice(modalData.itemIdx, 1);
-    } else if (modalData.type === "personal" && data.personal && data.personal[origDay]) {
-      data.personal[origDay].splice(modalData.itemIdx, 1);
-      if (PERSONAL[origDay]) PERSONAL[origDay].splice(modalData.itemIdx, 1);
-    } else if (modalData.type === "extended" && data.extended) {
-      data.extended.splice(modalData.itemIdx, 1);
-      EXTENDED.splice(modalData.itemIdx, 1);
-    } else if (!isBuiltInType(modalData.type) && data.custom && data.custom[modalData.type] && data.custom[modalData.type][origDay]) {
-      data.custom[modalData.type][origDay].splice(modalData.itemIdx, 1);
-    }
-  }
-  if (type === "school") {
-    const lesson = { subj, time };
-    if (num) lesson.n = parseInt(num);
-    if (room) lesson.room = room;
-    if (location) lesson.location = location;
-    if (teacher) lesson.teacher = teacher;
-    if (color) lesson.color = color;
-    if (icon) lesson.icon = icon;
-    if (typeRaw && typeRaw !== (TYPE_KEY_TO_NAME[type] || "")) lesson.typeLabel = typeRaw;
-    while (data.schedule.length <= dayIdx) data.schedule.push({ name: SCHEDULE[data.schedule.length]?.name || "", lessons: [] });
-    if (isEdit && modalData.type === type) {
-      data.schedule[dayIdx].lessons[modalData.itemIdx] = lesson;
-    } else {
-      data.schedule[dayIdx].lessons.push(lesson);
-      data.schedule[dayIdx].lessons.sort((a, b) => parseTime(a.time) - parseTime(b.time));
-    }
-    savedItem = lesson;
-  } else if (type === "personal") {
-    const item = { subj, time, icon: icon || "🤸" };
-    if (room) item.room = room;
-    if (location) item.location = location;
-    if (teacher) item.teacher = teacher;
-    if (color) item.color = color;
-    if (typeRaw && typeRaw !== (TYPE_KEY_TO_NAME[type] || "")) item.typeLabel = typeRaw;
-    if (!data.personal) data.personal = {};
-    if (!data.personal[dayIdx]) data.personal[dayIdx] = [];
-    if (isEdit && modalData.type === type) {
-      data.personal[dayIdx][modalData.itemIdx] = item;
-    } else {
-      data.personal[dayIdx].push(item);
-      data.personal[dayIdx].sort((a, b) => parseTime(a.time) - parseTime(b.time));
-    }
-    savedItem = item;
-  } else if (!isBuiltInType(type)) {
-    const item = { subj, time, icon: icon || "⭐" };
-    if (room) item.room = room;
-    if (location) item.location = location;
-    if (teacher) item.teacher = teacher;
-    if (color) item.color = color;
-    if (typeRaw && typeRaw !== type) item.typeLabel = typeRaw;
-    if (!data.custom) data.custom = {};
-    if (!data.custom[type]) data.custom[type] = {};
-    if (!data.custom[type][dayIdx]) data.custom[type][dayIdx] = [];
-    if (isEdit && modalData.type === type) {
-      data.custom[type][dayIdx][modalData.itemIdx] = item;
-    } else {
-      data.custom[type][dayIdx].push(item);
-      data.custom[type][dayIdx].sort((a, b) => parseTime(a.time) - parseTime(b.time));
-    }
-    savedItem = item;
-  } else {
-    const item = { subj, time, icon: icon || "🎒" };
-    if (room) item.room = room;
-    if (location) item.location = location;
-    if (teacher) item.teacher = teacher;
-    if (color) item.color = color;
-    if (typeRaw && typeRaw !== (TYPE_KEY_TO_NAME[type] || "")) item.typeLabel = typeRaw;
-    if (!data.extended) data.extended = [];
-    if (isEdit && modalData.type === type) {
-      data.extended[modalData.itemIdx] = item;
-    } else {
-      data.extended.push(item);
-      data.extended.sort((a, b) => parseTime(a.time) - parseTime(b.time));
-    }
-    savedItem = item;
-  }
-  if (isEdit && modalData.type === type && modalData.orig) {
-    let stored = null;
-    if (type === "school") stored = data.schedule[dayIdx] && data.schedule[dayIdx].lessons[modalData.itemIdx];
-    else if (type === "personal") stored = data.personal && data.personal[dayIdx] && data.personal[dayIdx][modalData.itemIdx];
-    else if (type === "extended") stored = data.extended && data.extended[modalData.itemIdx];
-    else stored = data.custom && data.custom[type] && data.custom[type][dayIdx] && data.custom[type][dayIdx][modalData.itemIdx];
-    if (stored) {
-      if (modalData.orig.paid) stored.paid = modalData.orig.paid;
-      if (modalData.orig.days) stored.days = modalData.orig.days;
-    }
-  }
-  if (savedItem && extraDays.length) {
-    for (const d of extraDays) {
-      const clone = JSON.parse(JSON.stringify(savedItem));
-      const exists = (arr) => arr.some(x => x.subj === clone.subj && x.time === clone.time);
-      if (type === "school") {
-        while (data.schedule.length <= d) data.schedule.push({ name: SCHEDULE[data.schedule.length]?.name || "", lessons: [] });
-        if (!exists(data.schedule[d].lessons)) {
-          data.schedule[d].lessons.push(clone);
-          data.schedule[d].lessons.sort((a, b) => parseTime(a.time) - parseTime(b.time));
-        }
-      } else if (type === "personal") {
-        if (!data.personal) data.personal = {};
-        if (!data.personal[d]) data.personal[d] = [];
-        if (!exists(data.personal[d])) {
-          data.personal[d].push(clone);
-          data.personal[d].sort((a, b) => parseTime(a.time) - parseTime(b.time));
-        }
-      } else if (!isBuiltInType(type)) {
-        if (!data.custom[type]) data.custom[type] = {};
-        if (!data.custom[type][d]) data.custom[type][d] = [];
-        if (!exists(data.custom[type][d])) {
-          data.custom[type][d].push(clone);
-          data.custom[type][d].sort((a, b) => parseTime(a.time) - parseTime(b.time));
-        }
-      }
-    }
-  }
-  saveLocalData(data);
-  const syncDays = [dayIdx, ...extraDays];
-  if (type === "school") {
-    for (const d of syncDays) { while (SCHEDULE.length <= d) SCHEDULE.push({ name: "", lessons: [] }); SCHEDULE[d].lessons = data.schedule[d].lessons; }
-  } else if (type === "personal") {
-    for (const d of syncDays) PERSONAL[d] = (data.personal && data.personal[d]) || [];
-  } else if (!isBuiltInType(type)) {
-    if (!CUSTOM[type]) CUSTOM[type] = {};
-    for (const d of syncDays) CUSTOM[type][d] = (data.custom[type] && data.custom[type][d]) || [];
-  } else { EXTENDED = data.extended; }
-  closeModal();
-  buildToggles();
-  renderAll();
-}
-
-function deleteFromModal() {
-  if (window.Android) {
-    if (!Android.showConfirm("Удалить?")) return;
-  } else if (!confirm("Удалить?")) return;
-  const data = loadLocalData();
-  if (!data) return;
-  if (modalData.type === "school" && modalData.dayIdx >= 0 && modalData.itemIdx >= 0) {
-    data.schedule[modalData.dayIdx].lessons.splice(modalData.itemIdx, 1);
-    SCHEDULE[modalData.dayIdx].lessons = data.schedule[modalData.dayIdx].lessons;
-  } else if (modalData.type === "personal" && modalData.dayIdx >= 0 && modalData.itemIdx >= 0) {
-    data.personal[modalData.dayIdx].splice(modalData.itemIdx, 1);
-    PERSONAL[modalData.dayIdx] = data.personal[modalData.dayIdx];
-  } else if (modalData.type === "extended" && modalData.itemIdx >= 0) {
-    data.extended.splice(modalData.itemIdx, 1);
-    EXTENDED = data.extended;
-  } else if (!isBuiltInType(modalData.type) && modalData.dayIdx >= 0 && modalData.itemIdx >= 0) {
-    if (data.custom && data.custom[modalData.type] && data.custom[modalData.type][modalData.dayIdx]) {
-      data.custom[modalData.type][modalData.dayIdx].splice(modalData.itemIdx, 1);
-      if (!CUSTOM[modalData.type]) CUSTOM[modalData.type] = {};
-      CUSTOM[modalData.type][modalData.dayIdx] = data.custom[modalData.type][modalData.dayIdx];
-    }
-  }
-  saveLocalData(data);
-  closeModal();
-  buildToggles();
-  renderAll();
-}
-
-function renderAll() {
-  const todayIdx = getTodayIndex();
-  const content = document.getElementById("dayContent");
-  const isMobile = window.innerWidth < 768;
-
-  function getLessonState(dayIdx, lessonIdx, day) {
-    if (dayIdx < todayIdx) return "past";
-    if (dayIdx > todayIdx) return "future";
-    const info = getCurrentLesson(day);
-    if (!info) {
-      const now = new Date();
-      const cur = now.getHours() * 60 + now.getMinutes();
-      if (!day.lessons.length) return "future";
-      const lastLesson = day.lessons[day.lessons.length - 1];
-      const lastEnd = parseTime(lastLesson.time.split(/[–\-]/)[1]) || parseTime(lastLesson.time) + 45;
-      if (cur >= lastEnd) return "past";
-      return "future";
-    }
-    if (lessonIdx < info.idx) return "past";
-    if (lessonIdx === info.idx) return info.type;
-    return "future";
-  }
-
-  function getTimedState(item, dayIdx) {
-    if (dayIdx < todayIdx) return "past";
-    if (dayIdx > todayIdx) return "future";
-    const now = new Date();
-    const current = now.getHours() * 60 + now.getMinutes();
-    const start = parseTime(item.time);
-    const end = parseTime(item.time.split(/[–\-]/)[1]);
-    if (current >= start && current < end) return "current";
-    if (current >= end) return "past";
-    return start - current <= 120 ? "next" : "future";
-  }
-
-  function renderDayLessons(d, dayIdx) {
-    const school = schoolOn ? d.lessons.map((l, li) => ({
-      ...l, _type: "school", _icon: l.icon || ICONS[l.subj] || "📋", _itemIdx: li,
-      _state: getLessonState(dayIdx, li, d),
-      _noMerge: l.subj === "ФКиЗ"
-    })) : [];
-    const personal = (personalOn ? (PERSONAL[dayIdx] || []) : []).map((p, pi) => ({
-      ...p, _type: "personal", _icon: p.icon || "🤸", _itemIdx: pi,
-      _state: getTimedState(p, dayIdx)
-    }));
-    const extended = (extendedOn && dayIdx <= 4 ? EXTENDED : []).map((ext, ei) => ({ // Mon-Fri only, Sat/Sun off
-      ...ext, _type: "extended", _icon: ext.icon, _itemIdx: ei,
-      _state: getTimedState(ext, dayIdx)
-    })).filter(ext => {
-      if (ext.days && !ext.days.includes(dayIdx)) return false;
-      const eS = parseTime(ext.time);
-      const eE = parseTime(ext.time.split(/[–\-]/)[1]);
-      for (const l of schoolOn ? d.lessons : []) {
-        if (l.subj && (l.subj.startsWith("Факультатив") || l.subj.startsWith("Кружок"))) continue;
-        const lS = parseTime(l.time);
-        const lE = parseTime(l.time.split(/[–\-]/)[1]);
-        if (eS < lE && eE > lS) return false;
-      }
-      return true;
-    });
-    const custom = Object.keys(CUSTOM).filter(customOn).flatMap(k => (((CUSTOM[k] || {})[dayIdx]) || []).map((p, pi) => ({
-      ...p, icon: p.icon || "⭐", _type: k, _icon: p.icon || "📋", _itemIdx: pi,
-      _state: getTimedState(p, dayIdx)
-    })));
-    const all = [...school, ...personal, ...custom, ...extended];
-    if (all.length <= 1) {
-      return all.map(item => {
-        if (item._type === "school") return renderLesson(item, item._state, dayIdx, item._itemIdx);
-        return renderExtendedItem(item, item._state, dayIdx, item._itemIdx);
-      }).join("");
-    }
-
-    const parent = all.map((_, i) => i);
-    function find(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
-    function union(a, b) { parent[find(a)] = find(b); }
-
-    for (let i = 0; i < all.length; i++) {
-      if (all[i]._noMerge) continue;
-      for (let j = i + 1; j < all.length; j++) {
-        if (all[j]._noMerge) continue;
-        if (timeRangeOverlap(all[i], all[j])) union(i, j);
-      }
-    }
-
-    const groups = {};
-    for (let i = 0; i < all.length; i++) {
-      const root = find(i);
-      if (!groups[root]) groups[root] = [];
-      groups[root].push(all[i]);
-    }
-
-    const merged = Object.values(groups).map(group => {
-      if (group.length > 1) {
-        group.sort((a, b) => parseTime(a.time) - parseTime(b.time));
-        return { type: "merge", items: group };
-      }
-      return group[0];
-    });
-    merged.sort((a, b) => {
-      const aTime = a.type === "merge" ? parseTime(a.items[0].time) : parseTime(a.time);
-      const bTime = b.type === "merge" ? parseTime(b.items[0].time) : parseTime(b.time);
-      return aTime - bTime;
-    });
-
-    return merged.map(item => {
-      if (item.type === "merge") return renderMergeCard(item.items, dayIdx);
-      if (item._type === "school") return renderLesson(item, item._state, dayIdx, item._itemIdx);
-      return renderExtendedItem(item, item._state, dayIdx, item._itemIdx);
-    }).join("");
-  }
-
-  if (isMobile) {
-    content.innerHTML = SCHEDULE.map((d, i) => {
-      const hasSchool = schoolOn && d.lessons.length > 0;
-      const hasPersonal = personalOn && PERSONAL[i] && PERSONAL[i].length > 0;
-      const hasExtended = extendedOn && i <= 4 && EXTENDED.length > 0;
-      const hasCustom = Object.keys(CUSTOM).some(k => customOn(k) && CUSTOM[k][i] && CUSTOM[k][i].length > 0);
-      if (!hasSchool && !hasPersonal && !hasExtended && !hasCustom) {
-        return `<div class="day-panel${i === currentDayIdx ? ' active' : ''}">${renderWeekendMsg(i)}</div>`;
-      }
-      return `<div class="day-panel${i === currentDayIdx ? ' active' : ''}">${renderDayLessons(d, i)}</div>`;
-    }).join("");
-  } else {
-    const left = SCHEDULE.slice(0, 3);
-    const right = SCHEDULE.slice(3, 5);
-    const renderSide = (days) => days.map(d => {
-      const dayIdx = SCHEDULE.indexOf(d);
-      const hasSchool = schoolOn && d.lessons.length > 0;
-      const hasPersonal = personalOn && PERSONAL[dayIdx] && PERSONAL[dayIdx].length > 0;
-      const hasExtended = extendedOn && dayIdx <= 4 && EXTENDED.length > 0;
-      const hasCustom = Object.keys(CUSTOM).some(k => customOn(k) && CUSTOM[k][dayIdx] && CUSTOM[k][dayIdx].length > 0);
-      if (!hasSchool && !hasPersonal && !hasExtended && !hasCustom) {
-        return `
-          <div class="diary-day" data-day="${dayIdx}">
-            <div class="diary-day-name">${d.name}</div>
-            ${renderWeekendMsg(dayIdx)}
-          </div>`;
-      }
-      return `
-        <div class="diary-day" data-day="${dayIdx}">
-          <div class="diary-day-name">${d.name}</div>
-          ${renderDayLessons(d, dayIdx)}
-        </div>`;
-    }).join("");
-
-    const satMsg = getWeekendMessage(5);
-    const sunMsg = getWeekendMessage(6);
-    const satAnim = satMsg.anim ? ` animate-${satMsg.anim}` : "";
-    const sunAnim = sunMsg.anim ? ` animate-${sunMsg.anim}` : "";
-    const weekendBlock = `
-      <div class="diary-day" data-day="5">
-        <div class="diary-day-name" style="background:#e8a84c;">Суббота</div>
-        <div class="weekend-msg${satAnim}">
-          <span class="emoji">${satMsg.emoji}</span>
-          ${satMsg.text}
-        </div>
-      </div>
-      <div class="diary-day" data-day="6">
-        <div class="diary-day-name" style="background:#d45555;">Воскресенье</div>
-        <div class="weekend-msg${sunAnim}">
-          <span class="emoji">${sunMsg.emoji}</span>
-          ${sunMsg.text}
-        </div>
-      </div>`;
-
-    content.innerHTML = `
-      <div class="diary">
-        <div class="diary-side">${renderSide(left)}</div>
-        <div class="diary-side">${renderSide(right)}${weekendBlock}</div>
-      </div>`;
-  }
-  updateDayHeading();
-}
-
 document.addEventListener("touchstart", (e) => {
   if (!e.target.closest("#dayContent")) return;
   touchStartX = e.touches[0].clientX;
@@ -1697,7 +976,7 @@ document.addEventListener("touchstart", (e) => {
 }, { passive: true });
 
 document.addEventListener("touchend", (e) => {
-  if (!e.target.closest("#dayContent") || !touchStartTime || window.innerWidth >= 768) return;
+  if (!e.target.closest("#dayContent") || !touchStartTime || scheduleView !== "day") return;
   const endX = e.changedTouches[0].clientX;
   const endY = e.changedTouches[0].clientY;
   const dx = endX - touchStartX;
@@ -1714,26 +993,20 @@ document.addEventListener("touchend", (e) => {
 }, { passive: true });
 
 async function init() {
-  try {
-    const [scheduleRes, holidaysRes] = await Promise.all([
-      fetch("timeSchedule.json?" + Date.now()),
-      fetch("holidays.json?" + Date.now())
-    ]);
-    const scheduleData = await scheduleRes.json();
-    SCHEDULE = scheduleData.schedule;
-    PERSONAL = scheduleData.personal || {};
-    EXTENDED = scheduleData.extended;
-    CUSTOM = scheduleData.custom || {};
-    if (localStorage.getItem('tg_no_defaults') === 'true') {
-      // Full reset was performed: start from an empty app instead of built-in defaults.
-      SCHEDULE = SCHEDULE.map(function(d){ return { name: d.name, short: d.short, lessons: [] }; });
-      EXTENDED = []; CUSTOM = {}; PERSONAL = {};
-    }
-    HOLIDAYS = await holidaysRes.json();
-  } catch (e) {
-    console.error("Failed to load data:", e);
+  const saved = loadLocalData();
+  const results = await Promise.allSettled(["timeSchedule.json", "holidays.json"].map(async path => {
+    const response = await fetch(path);
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    return response.json();
+  }));
+  if (results[0].status === "rejected" && !saved) {
+    document.getElementById("focusTitle").textContent = "Не удалось загрузить расписание";
+    document.getElementById("status").innerHTML = '<button class="text-button" onclick="location.reload()">Повторить загрузку ↻</button>';
     return;
   }
+  adoptData(ScheduleCore.normalize(results[0].status === "fulfilled" ? results[0].value : saved));
+  HOLIDAYS = results[1].status === "fulfilled" ? results[1].value : null;
+  if (localStorage.getItem("tg_no_defaults") === "true") adoptData(ScheduleCore.normalize());
 
   var isEmpty = !SCHEDULE || SCHEDULE.every(function(d) { return !d.lessons || d.lessons.length === 0; });
   if (isEmpty && !loadLocalData() && localStorage.getItem('tg_no_defaults') !== 'true') {
@@ -1749,13 +1022,7 @@ async function init() {
     } catch (e) { /* нет дефолтных файлов — ок */ }
   }
 
-  const local = loadLocalData();
-  if (local) {
-    if (local.schedule && local.schedule.length) SCHEDULE = local.schedule;
-    if (local.personal && Object.keys(local.personal).length) PERSONAL = local.personal;
-    if (local.custom && Object.keys(local.custom).length) CUSTOM = local.custom;
-    if (local.extended && local.extended.length) EXTENDED = local.extended;
-  }
+  adoptData(ScheduleCore.overlay(currentData(), saved));
 
   reconcileReminders();
   if (window.Android) Android.syncReminders(JSON.stringify(reminders));
@@ -1786,8 +1053,8 @@ async function init() {
   renderProgress();
   renderCountdowns();
 
-  startEngines(() => { renderStatus(); renderProgress(); renderCountdowns(); });
-  window.addEventListener("resize", renderAll);
+  setupScheduleUI();
+  startEngines(tickSchedule);
 }
 
 function exportSchool() {
