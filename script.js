@@ -727,12 +727,25 @@ function renderProgress() {
   } catch(err) {}
 }
 
+function updateDayHeading() {
+  const day = SCHEDULE[currentDayIdx];
+  if (!day) return;
+  const title = document.getElementById("selectedDayLabel");
+  const summary = document.getElementById("daySummary");
+  if (title) title.textContent = day.name;
+  if (summary) {
+    const scope = window.innerWidth < 768 ? document.querySelector(".day-panel.active") : document.querySelector(`.diary-day[data-day="${currentDayIdx}"]`);
+    const count = scope ? scope.querySelectorAll(".lesson, .merge-row").length : 0;
+    summary.textContent = count ? `${count} занятий` : "Свободный день";
+  }
+}
+
 function renderTabs() {
   const wrap = document.getElementById("dayTabs");
   const today = getTodayIndex();
   wrap.innerHTML = SCHEDULE.map((d, i) => {
-    const cls = i === today ? " active today" : "";
-    return `<div class="day-tab${cls}" data-day="${i}" onclick="switchDay(${i})">${d.short}</div>`;
+    const cls = `${i === currentDayIdx ? " active" : ""}${i === today ? " today" : ""}`;
+    return `<button type="button" class="day-tab${cls}" data-day="${i}" aria-label="${d.name}${i === today ? ", сегодня" : ""}" aria-current="${i === currentDayIdx ? "date" : "false"}" onclick="switchDay(${i})"><span>${d.short}</span></button>`;
   }).join("");
 }
 
@@ -741,10 +754,16 @@ function switchDay(idx) {
   currentDayIdx = idx;
   document.querySelectorAll(".day-tab").forEach((t, i) => {
     t.classList.toggle("active", i === idx);
+    t.setAttribute("aria-current", i === idx ? "date" : "false");
   });
   document.querySelectorAll(".day-panel").forEach((p, i) => {
     p.classList.toggle("active", i === idx);
   });
+  updateDayHeading();
+  if (window.innerWidth >= 768) {
+    const section = document.querySelector(`.diary-day[data-day="${idx}"]`);
+    if (section) section.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "center" });
+  }
 }
 
 function buildToggles() {
@@ -1262,8 +1281,10 @@ function renderAll() {
     if (!info) {
       const now = new Date();
       const cur = now.getHours() * 60 + now.getMinutes();
-      const lastEnd = parseTime(day.lessons[day.lessons.length - 1].time.split(/[–\-]/)[1]) || parseTime(day.lessons[day.lessons.length - 1].time) + 45;
-      if (day.lessons.length && cur >= lastEnd) return "past";
+      if (!day.lessons.length) return "future";
+      const lastLesson = day.lessons[day.lessons.length - 1];
+      const lastEnd = parseTime(lastLesson.time.split(/[–\-]/)[1]) || parseTime(lastLesson.time) + 45;
+      if (cur >= lastEnd) return "past";
       return "future";
     }
     if (lessonIdx < info.idx) return "past";
@@ -1271,18 +1292,16 @@ function renderAll() {
     return "future";
   }
 
-  function getExtState(itemIdx, dayIdx) {
+  function getTimedState(item, dayIdx) {
     if (dayIdx < todayIdx) return "past";
     if (dayIdx > todayIdx) return "future";
     const now = new Date();
-    const cur = now.getHours() * 60 + now.getMinutes();
-    const item = EXTENDED[itemIdx];
-    const s = parseTime(item.time);
-    const e = parseTime(item.time.split(/[–\-]/)[1]);
-    if (cur >= s && cur < e) return "current";
-    if (cur >= e) return "past";
-    if (cur < s && (s - cur) <= 120) return "next";
-    return "future";
+    const current = now.getHours() * 60 + now.getMinutes();
+    const start = parseTime(item.time);
+    const end = parseTime(item.time.split(/[–\-]/)[1]);
+    if (current >= start && current < end) return "current";
+    if (current >= end) return "past";
+    return start - current <= 120 ? "next" : "future";
   }
 
   function renderDayLessons(d, dayIdx) {
@@ -1293,27 +1312,16 @@ function renderAll() {
     })) : [];
     const personal = (personalOn ? (PERSONAL[dayIdx] || []) : []).map((p, pi) => ({
       ...p, _type: "personal", _icon: p.icon || "🤸", _itemIdx: pi,
-      _state: (function() {
-        if (dayIdx < todayIdx) return "past";
-        if (dayIdx > todayIdx) return "future";
-        const now = new Date();
-        const cur = now.getHours() * 60 + now.getMinutes();
-        const s = parseTime(p.time);
-        const e = parseTime(p.time.split(/[–\-]/)[1]);
-        if (cur >= s && cur < e) return "current";
-        if (cur >= e) return "past";
-        if (cur < s && (s - cur) <= 120) return "next";
-        return "future";
-      })()
+      _state: getTimedState(p, dayIdx)
     }));
     const extended = (extendedOn && dayIdx <= 4 ? EXTENDED : []).map((ext, ei) => ({ // Mon-Fri only, Sat/Sun off
       ...ext, _type: "extended", _icon: ext.icon, _itemIdx: ei,
-      _state: getExtState(ei, dayIdx)
+      _state: getTimedState(ext, dayIdx)
     })).filter(ext => {
       if (ext.days && !ext.days.includes(dayIdx)) return false;
       const eS = parseTime(ext.time);
       const eE = parseTime(ext.time.split(/[–\-]/)[1]);
-      for (const l of d.lessons) {
+      for (const l of schoolOn ? d.lessons : []) {
         if (l.subj && (l.subj.startsWith("Факультатив") || l.subj.startsWith("Кружок"))) continue;
         const lS = parseTime(l.time);
         const lE = parseTime(l.time.split(/[–\-]/)[1]);
@@ -1323,18 +1331,7 @@ function renderAll() {
     });
     const custom = Object.keys(CUSTOM).filter(customOn).flatMap(k => (((CUSTOM[k] || {})[dayIdx]) || []).map((p, pi) => ({
       ...p, icon: p.icon || "⭐", _type: k, _icon: p.icon || "📋", _itemIdx: pi,
-      _state: (function() {
-        if (dayIdx < todayIdx) return "past";
-        if (dayIdx > todayIdx) return "future";
-        const now = new Date();
-        const cur = now.getHours() * 60 + now.getMinutes();
-        const s = parseTime(p.time);
-        const e = parseTime(p.time.split(/[–\-]/)[1]);
-        if (cur >= s && cur < e) return "current";
-        if (cur >= e) return "past";
-        if (cur < s && (s - cur) <= 120) return "next";
-        return "future";
-      })()
+      _state: getTimedState(p, dayIdx)
     })));
     const all = [...school, ...personal, ...custom, ...extended];
     if (all.length <= 1) {
@@ -1405,13 +1402,13 @@ function renderAll() {
       const hasCustom = Object.keys(CUSTOM).some(k => customOn(k) && CUSTOM[k][dayIdx] && CUSTOM[k][dayIdx].length > 0);
       if (!hasSchool && !hasPersonal && !hasExtended && !hasCustom) {
         return `
-          <div class="diary-day">
+          <div class="diary-day" data-day="${dayIdx}">
             <div class="diary-day-name">${d.name}</div>
             ${renderWeekendMsg(dayIdx)}
           </div>`;
       }
       return `
-        <div class="diary-day">
+        <div class="diary-day" data-day="${dayIdx}">
           <div class="diary-day-name">${d.name}</div>
           ${renderDayLessons(d, dayIdx)}
         </div>`;
@@ -1422,12 +1419,14 @@ function renderAll() {
     const satAnim = satMsg.anim ? ` animate-${satMsg.anim}` : "";
     const sunAnim = sunMsg.anim ? ` animate-${sunMsg.anim}` : "";
     const weekendBlock = `
-      <div class="diary-day">
+      <div class="diary-day" data-day="5">
         <div class="diary-day-name" style="background:#e8a84c;">Суббота</div>
         <div class="weekend-msg${satAnim}">
           <span class="emoji">${satMsg.emoji}</span>
           ${satMsg.text}
         </div>
+      </div>
+      <div class="diary-day" data-day="6">
         <div class="diary-day-name" style="background:#d45555;">Воскресенье</div>
         <div class="weekend-msg${sunAnim}">
           <span class="emoji">${sunMsg.emoji}</span>
@@ -1441,15 +1440,18 @@ function renderAll() {
         <div class="diary-side">${renderSide(right)}${weekendBlock}</div>
       </div>`;
   }
+  updateDayHeading();
 }
 
 document.addEventListener("touchstart", (e) => {
+  if (!e.target.closest("#dayContent")) return;
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
   touchStartTime = Date.now();
 }, { passive: true });
 
 document.addEventListener("touchend", (e) => {
+  if (!e.target.closest("#dayContent") || !touchStartTime || window.innerWidth >= 768) return;
   const endX = e.changedTouches[0].clientX;
   const endY = e.changedTouches[0].clientY;
   const dx = endX - touchStartX;
